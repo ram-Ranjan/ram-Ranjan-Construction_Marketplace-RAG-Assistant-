@@ -1,17 +1,21 @@
+---
+title: Indecimal RAG Assistant
+emoji: 🏗️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
+
+
 # Indecimal RAG Assistant
 
 A minimal RAG pipeline for a construction marketplace. Answers user questions strictly from internal documents — no hallucination, no guessing.
 
 ---
 
----
-title: Indecimal RAG Assistant
-logo: 🏗️
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: false
----
+
 
 ## How it works
 
