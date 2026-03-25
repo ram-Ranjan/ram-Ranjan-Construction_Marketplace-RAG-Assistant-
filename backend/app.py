@@ -1,6 +1,9 @@
 import os
 import sys
 
+from flask import send_from_directory
+
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, jsonify, request
@@ -19,6 +22,12 @@ print(f"[startup] indexed {chunk_count} chunks")
 
 
 #Routes
+
+
+@app.get("/")
+def frontend():
+    frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    return send_from_directory(frontend_path, "index.html")
 
 @app.get("/api/health")
 def health():

@@ -555,7 +555,7 @@
     <div id="toast"></div>
 
     <script>
-      const API_URL_DEFAULT = "http://localhost:5000";
+      const API_URL_DEFAULT = window.location.origin;
 
       const $ = (id) => document.getElementById(id);
       const messagesEl = $("messages");

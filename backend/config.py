@@ -12,5 +12,5 @@ OPENROUTER_MODEL = "google/gemma-3-4b-it:free"
 OLLAMA_MODEL = "phi3:mini"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
-PORT = 5000
+PORT = 7860
 DEBUG = False

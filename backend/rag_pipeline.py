@@ -23,9 +23,6 @@ SYSTEM_PROMPT = (
     "5. Be clear and direct."
 )
 
-# ---------------------------------------------------------------------------
-# 1. Load documents
-# ---------------------------------------------------------------------------
 
 def load_docs(docs_dir=DOCS_DIR):
     docs = []
@@ -40,9 +37,7 @@ def load_docs(docs_dir=DOCS_DIR):
         docs.append({"id": fname.replace(".md", ""), "title": title, "content": raw})
     return docs
 
-# ---------------------------------------------------------------------------
-# 2. Chunking
-# ---------------------------------------------------------------------------
+
 
 def chunk_doc(doc, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     words = doc["content"].strip().split()
@@ -67,9 +62,6 @@ def chunk_all(docs):
         out.extend(chunk_doc(d))
     return out
 
-# ---------------------------------------------------------------------------
-# 3. TF-IDF (no internet needed)
-# ---------------------------------------------------------------------------
 
 def tokenize(text):
     return re.findall(r"[a-z0-9₹]+", text.lower())
@@ -100,9 +92,7 @@ def tfidf_vector(text, word2idx, idf):
         vec /= norm
     return vec
 
-# ---------------------------------------------------------------------------
-# 4. FAISS index
-# ---------------------------------------------------------------------------
+
 
 def build_index(chunks, word2idx, idf):
     vecs = np.stack([tfidf_vector(c["text"], word2idx, idf) for c in chunks])
@@ -110,9 +100,7 @@ def build_index(chunks, word2idx, idf):
     index.add(vecs) # type: ignore
     return index
 
-# ---------------------------------------------------------------------------
-# 5. Retrieval
-# ---------------------------------------------------------------------------
+
 
 def retrieve(query, index, chunks, word2idx, idf, top_k=TOP_K):
     q_vec = tfidf_vector(query, word2idx, idf).reshape(1, -1)
@@ -126,9 +114,6 @@ def retrieve(query, index, chunks, word2idx, idf, top_k=TOP_K):
         results.append(c)
     return results
 
-# ---------------------------------------------------------------------------
-# 6. Prompt builder
-# ---------------------------------------------------------------------------
 
 def build_prompt(query, chunks):
     parts = []
@@ -137,9 +122,7 @@ def build_prompt(query, chunks):
     context = "\n\n".join(parts)
     return f"{context}\n\nQuestion: {query}\nAnswer based strictly on the context above:"
 
-# ---------------------------------------------------------------------------
-# 7. Generation — OpenRouter
-# ---------------------------------------------------------------------------
+
 
 def generate(query, retrieved_chunks, api_key, model=OPENROUTER_MODEL):
     if not api_key:
@@ -181,9 +164,7 @@ def generate(query, retrieved_chunks, api_key, model=OPENROUTER_MODEL):
             return f"Error from OpenRouter: {e}"
     return "Error: still rate limited. Wait a minute and try again."
 
-# ---------------------------------------------------------------------------
-# 8. Generation — Ollama (bonus)
-# ---------------------------------------------------------------------------
+
 
 def generate_ollama(query, retrieved_chunks, model=OLLAMA_MODEL):
     payload = {
@@ -203,9 +184,6 @@ def generate_ollama(query, retrieved_chunks, model=OLLAMA_MODEL):
     except Exception as e:
         return f"Error from Ollama: {e}"
 
-# ---------------------------------------------------------------------------
-# 9. RAGEngine
-# ---------------------------------------------------------------------------
 
 class RAGEngine:
     def __init__(self, api_key="", model=OPENROUTER_MODEL):
