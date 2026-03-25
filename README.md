@@ -4,6 +4,15 @@ A minimal RAG pipeline for a construction marketplace. Answers user questions st
 
 ---
 
+---
+title: Indecimal RAG Assistant
+logo: 🏗️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 ## How it works
 
 ```
