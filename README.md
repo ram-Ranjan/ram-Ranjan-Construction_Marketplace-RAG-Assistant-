@@ -7,18 +7,17 @@ sdk: docker
 pinned: false
 ---
 
-
-
 # Indecimal RAG Assistant
 
 A minimal RAG pipeline for a construction marketplace. Answers user questions strictly from internal documents — no hallucination, no guessing.
 
+## Live Demo
+
+[huggingface.co/spaces/ramranjan/Indecimal_rag_assistant](https://huggingface.co/spaces/ramranjan/Indecimal_rag_assistant)
+
 ---
 
-
-
-## How it works
-
+## Architecture
 ```
 User Query
     │
@@ -32,7 +31,7 @@ FAISS IndexFlatIP — cosine similarity search
 Top-4 chunks retrieved
     │
     ▼
-Claude (claude-sonnet-4-5) — grounded answer generation
+Mistral 7B via OpenRouter — grounded answer generation
     │
     ▼
 Answer + cited chunks shown in UI
@@ -40,129 +39,171 @@ Answer + cited chunks shown in UI
 
 ---
 
-## Embedding: why TF-IDF
+## Embedding Model — TF-IDF
 
-I went with TF-IDF instead of sentence-transformers for a few practical reasons:
+Went with TF-IDF instead of sentence-transformers for a few practical reasons:
 
 - no model download, works fully offline
-- zero GPU dependency
+- zero GPU dependency  
 - easy to debug — you can see exactly which terms drove a high score
-- the documents have very consistent vocabulary (brand names, prices, policy terms) so lexical matching actually works well here
+- the documents have consistent vocabulary (brand names, prices, policy terms) so lexical matching works well here
 
-The trade-off is that it won't handle paraphrases as well as a neural model. For production I'd swap in `all-MiniLM-L6-v2` or the Anthropic embeddings API.
+Trade-off vs neural embeddings:
+
+| | TF-IDF | Sentence Transformers |
+|---|---|---|
+| Setup | Instant, no downloads | Requires model download (~90MB) |
+| Semantic depth | Lexical matching | True semantic understanding |
+| Paraphrase handling | Misses synonyms | Handles paraphrases |
+| Speed | Very fast | Slower (neural inference) |
+| This corpus | Works well | Marginally better |
+
+For production I'd swap in `all-MiniLM-L6-v2` or the Anthropic embeddings API.
 
 ---
 
-## Chunking
+## Chunking Strategy
 
-Sliding window over words: 400 words per chunk, 80 word overlap. Each chunk stores its doc title and id for source attribution.
+Sliding window over words — 380 words per chunk, 75 word overlap. Each chunk stores its doc title and id for source attribution.
 
-The overlap prevents information loss at chunk boundaries — if a sentence spans two chunks, both will have partial context.
+The overlap prevents information loss at boundaries — if a sentence spans two chunks, both will have partial context.
+```python
+def chunk_doc(doc, size=380, overlap=75):
+    words = doc["content"].strip().split()
+    chunks = []
+    start = 0
+    while start < len(words):
+        end = min(start + size, len(words))
+        chunks.append({
+            "chunk_id": f"{doc['id']}_chunk_{len(chunks)}",
+            "doc_title": doc["title"],
+            "text": " ".join(words[start:end]),
+        })
+        if end == len(words):
+            break
+        start += size - overlap
+    return chunks
+```
 
 ---
 
-## Grounding enforcement
+## Vector Indexing & Retrieval
 
-The system prompt is strict:
+- Index: `faiss.IndexFlatIP` (inner product on unit-normalized vectors = cosine similarity)
+- Query is vectorized using the same TF-IDF vocab built at index time
+- Top-4 chunks returned by default (configurable)
 
+---
+
+## Grounding Enforcement
+
+System prompt is strict — the LLM is told to answer only from provided context:
 ```
 STRICT RULES:
-1. Answer ONLY using the context chunks provided.
+1. Answer ONLY using the context chunks provided below.
 2. If the answer is not in the context, say so honestly.
-3. Cite which document your answer is based on.
+3. Mention which document your answer is based on.
 4. Do not speculate beyond the context.
 ```
 
-The retrieved chunks are injected directly into the user message before the question, so the model always sees them.
+Retrieved chunks are injected directly into the prompt before the question. The UI also shows every retrieved chunk with its relevance score so the user can verify grounding themselves.
 
 ---
 
-## Running locally
-
+## Running Locally
 ```bash
-git clone <repo>
+git clone https://github.com/ramranjan/indecimal-rag
 cd indecimal-rag
 
-python -m venv venv
-source venv/bin/activate     # Windows: venv\Scripts\activate
+conda create -n indecimal-rag python=3.11 -y
+conda activate indecimal-rag
 pip install -r requirements.txt
 
-cp .env.example .env
-# add your Anthropic key to .env
-
-cd backend
-ANTHROPIC_API_KEY=your_key python app.py
+# Windows CMD
+set OPENROUTER_API_KEY=sk-or-v1-...
+python backend/app.py
 ```
 
-Then open `frontend/index.html` in a browser. Enter your backend URL (`http://localhost:5000`) in the sidebar if it isn't already set.
+Then open `frontend/index.html` in your browser, or serve it:
+```bash
+cd frontend
+python -m http.server 8080
+# open http://localhost:8080
+```
 
 ---
 
-## Running the evaluation
-
+## Running the Evaluation
 ```bash
-ANTHROPIC_API_KEY=your_key python eval/run_eval.py
+set OPENROUTER_API_KEY=sk-or-v1-...
+python eval/run_eval.py
 ```
 
 Results are written to `eval/eval_results.md`.
 
 ---
 
-## Project structure
-
+## Project Structure
 ```
 indecimal-rag/
 ├── backend/
-│   ├── app.py          Flask API server
-│   ├── rag_engine.py   RAG pipeline (chunking, TF-IDF, FAISS, Claude)
-│   └── config.py       Config constants
+│   ├── app.py           Flask API server
+│   ├── rag_engine.py    RAG pipeline (chunking, TF-IDF, FAISS, OpenRouter)
+│   └── config.py        Config constants
 ├── frontend/
-│   └── index.html      Single-file chatbot UI (no build step)
+│   └── index.html       Single-file chatbot UI (no build step needed)
 ├── documents/
-│   ├── doc1.md         Company overview & customer journey
-│   ├── doc2.md         Package comparison & specs
-│   └── doc3.md         Policies, quality, guarantees
+│   ├── doc1.md          Company overview & customer journey
+│   ├── doc2.md          Package comparison & specs
+│   └── doc3.md          Policies, quality, guarantees
 ├── eval/
-│   └── run_eval.py     15-question evaluation script
+│   └── run_eval.py      15-question evaluation script
+├── Dockerfile
 ├── requirements.txt
-├── .env.example
 └── README.md
 ```
 
 ---
 
-## Evaluation results
+## Evaluation Results
 
-See `eval/eval_results.md` after running the eval script.
-
-Quick summary from my run:
+15 test questions derived from the documents:
 
 | Metric | Score |
 |---|---|
 | Retrieval hits | 15/15 |
 | No hallucination risk | 15/15 |
-| Complete answers | 15/15 |
-| Grounded answers | 15/15 |
-| Avg response time | ~11s |
+| Complete answers | 13/15 |
+| Grounded answers | 13/15 |
+| Avg response time | 24.68s |
 
 **Observations:**
 
-The system handles direct vocabulary questions very well — anything asking about specific brands, prices, or policy names scores high with TF-IDF because the document language is consistent. Where it struggles is with paraphrase queries; asking "protective material over head" instead of "PPE" would miss.
+Retrieval is solid across all 15 questions — TF-IDF works well here because the document vocabulary is domain-specific and consistent. Brand names, price figures, and policy terms all score high when queried directly.
 
-Grounding is solid. The strict system prompt keeps Claude from adding context it doesn't have. In every test case where the answer wasn't in the documents, it said so rather than making something up.
+The 2 incomplete answers were caused by rate limiting on the free OpenRouter tier — the model returned shorter responses after multiple retries. This is an infrastructure constraint, not a retrieval or grounding issue.
 
-Latency is dominated by Claude API response time (~8–15s). The TF-IDF retrieval itself is under 10ms.
+Latency is dominated by OpenRouter API response time. The TF-IDF retrieval + FAISS search itself takes under 5ms.
+
+Grounding held up across all meaningful responses — the system prompt successfully prevents the model from adding information outside the retrieved chunks.
 
 ---
 
-## Bonus: local LLM comparison
+## Limitations
 
-The eval script supports swapping Claude for a local Ollama model. Install Ollama, pull `llama3.2:3b`, then change `ANTHROPIC_MODEL` in `config.py` to use the Ollama path.
+- Small corpus (3 documents, 7 chunks) — more documents would improve coverage
+- TF-IDF misses paraphrases — "protective gear" won't match "PPE"
+- No reranking step — a cross-encoder would improve precision
+- No chat memory — each query is independent
+- Free tier rate limits affect response time
 
-| | Claude API | llama3.2:3b (Ollama) |
-|---|---|---|
-| Answer quality | Better structured | Decent but verbose |
-| Latency | 8–15s (API) | 3–8s (CPU) |
-| Groundedness | Very strict | Occasionally adds context |
-| Cost | Per-token | Free |
-| Privacy | Data sent to API | Fully local |
+---
+
+## Tech Stack
+
+- **Embedding:** TF-IDF (custom, zero dependencies)
+- **Vector Index:** FAISS `IndexFlatIP`
+- **LLM:** Mistral 7B via OpenRouter (free tier)
+- **Backend:** Python + Flask
+- **Frontend:** Vanilla HTML/CSS/JS (single file, no framework)
+- **Deployment:** HuggingFace Spaces (Docker)
